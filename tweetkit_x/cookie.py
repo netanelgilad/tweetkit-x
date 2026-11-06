@@ -21,10 +21,12 @@ Nothing here ever prints a cookie value.
 """
 import os
 import subprocess
+import tempfile
+import re
 
 CONFIG_DIR = os.path.expanduser("~/.config/tweetkit")
 DEFAULT_COOKIE_FILE = os.path.join(CONFIG_DIR, "cookie.txt")
-DEFAULT_FILES = [os.path.join(os.getcwd(), "cookie.txt"), DEFAULT_COOKIE_FILE]
+DEFAULT_FILES = [DEFAULT_COOKIE_FILE]
 
 REQUIRED = ("auth_token", "ct0")
 
@@ -35,6 +37,8 @@ class CookieError(RuntimeError):
 
 def parse_cookie(cookie_str):
     """Return {name: value} for a `Cookie:` header / cookie string."""
+    if not isinstance(cookie_str, str) or len(cookie_str) > 16384 or any(ord(c) < 32 or ord(c) == 127 for c in cookie_str):
+        raise CookieError("Invalid cookie header")
     out = {}
     for part in cookie_str.split(";"):
         name, sep, value = part.strip().partition("=")
@@ -64,7 +68,7 @@ def user_id_of(cookie_str):
 
 
 def has_auth(cookie_str):
-    return all(k + "=" in cookie_str for k in REQUIRED)
+    return not missing_required(cookie_str)
 
 
 def missing_required(cookie_str):
@@ -87,10 +91,7 @@ def keychain_read(slug):
 
 
 def keychain_write(slug, value):
-    subprocess.run(
-        ["security", "add-generic-password", "-s", slug,
-         "-a", os.environ.get("USER", ""), "-w", value, "-U"],
-        check=True, capture_output=True, text=True, timeout=10)
+    raise CookieError("Keychain writes via command arguments are disabled; use secure local session handoff")
 
 
 def load_cookie(cookie=None, cookie_file=None, keychain_slug=None):
@@ -133,8 +134,18 @@ def save_cookie(cookie_str, out_file=None, keychain_slug=None):
         keychain_write(keychain_slug, cookie_str)
         return f"macOS Keychain (service '{keychain_slug}')"
     path = out_file or DEFAULT_COOKIE_FILE
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w") as f:
-        f.write(cookie_str.strip() + "\n")
-    os.chmod(path, 0o600)
+    parent = os.path.dirname(os.path.abspath(path))
+    os.makedirs(parent, mode=0o700, exist_ok=True)
+    if missing_required(cookie_str):
+        raise CookieError("Incomplete cookie header")
+    fd, temporary = tempfile.mkstemp(prefix=".cookie-", dir=parent)
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(cookie_str.strip() + "\n")
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
     return path

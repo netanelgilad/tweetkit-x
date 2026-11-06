@@ -12,6 +12,12 @@ Four sources, all reduced to the same `{name: value}` dict → cookie string:
 import json
 import os
 import zipfile
+from urllib.parse import urlsplit
+
+def _x_host(host):
+    host = (host or "").lower().lstrip(".")
+    return host in {"x.com", "twitter.com"} or host.endswith((".x.com", ".twitter.com"))
+
 
 # Cookies worth keeping if present. auth_token + ct0 are the only *required* ones.
 WANTED = ["auth_token", "ct0", "twid", "kdt", "att", "guest_id", "personalization_id"]
@@ -67,7 +73,7 @@ def from_har(path):
     for entry in har.get("log", {}).get("entries", []):
         req = entry.get("request", {})
         host = req.get("url", "")
-        if "x.com" not in host and "twitter.com" not in host:
+        if not _x_host(urlsplit(host).hostname):
             continue
         for c in req.get("cookies", []):
             if c.get("name") and c.get("value"):
@@ -97,6 +103,8 @@ def _cookies_from_dump_obj(obj):
     for c in items:
         if not isinstance(c, dict):
             continue
+        if c.get("domain") and not _x_host(c["domain"]):
+            continue
         name = c.get("key") or c.get("name")
         value = c.get("value")
         if name and value is not None:
@@ -114,6 +122,8 @@ def from_storagedump(zip_path):
         name = next((n for n in z.namelist() if n.endswith("cookies.json")), None)
         if not name:
             raise ValueError("no cookies.json inside the zip")
+        if z.getinfo(name).file_size > 1_000_000:
+            raise ValueError("Cookie export too large")
         obj = json.loads(z.read(name).decode("utf-8", "replace"))
     return _filter(_cookies_from_dump_obj(obj))
 

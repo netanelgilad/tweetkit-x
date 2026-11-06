@@ -1,0 +1,522 @@
+{
+  "status": {
+    "method": "whoami",
+    "description": "Check local session presence; does not verify X accepted it.",
+    "write": false,
+    "fields": {}
+  },
+  "profile": {
+    "method": "user_profile",
+    "description": "Read a user profile.",
+    "write": false,
+    "fields": {
+      "username": {
+        "type": "string",
+        "pattern": "^@?[A-Za-z0-9_]{1,15}$"
+      }
+    }
+  },
+  "myPosts": {
+    "method": "get_tweets",
+    "description": "Read your recent posts.",
+    "write": false,
+    "fields": {
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100,
+        "default": 20
+      }
+    }
+  },
+  "userPosts": {
+    "method": "get_tweets",
+    "description": "Read posts by username.",
+    "write": false,
+    "fields": {
+      "username": {
+        "type": "string",
+        "pattern": "^@?[A-Za-z0-9_]{1,15}$"
+      },
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100,
+        "default": 20
+      }
+    }
+  },
+  "search": {
+    "method": "search_x",
+    "description": "Search X using search operators.",
+    "write": false,
+    "fields": {
+      "query": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1000
+      },
+      "product": {
+        "type": "string",
+        "enum": [
+          "Top",
+          "Latest",
+          "Media"
+        ],
+        "default": "Latest"
+      },
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100,
+        "default": 20
+      }
+    }
+  },
+  "home": {
+    "method": "home_timeline",
+    "description": "Read your home timeline.",
+    "write": false,
+    "fields": {
+      "following": {
+        "type": "boolean",
+        "default": true
+      },
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100,
+        "default": 20
+      }
+    }
+  },
+  "post": {
+    "method": "get_tweet",
+    "description": "Read one post.",
+    "write": false,
+    "fields": {
+      "tweet_id": {
+        "type": "string",
+        "pattern": "^[0-9]{1,25}$"
+      }
+    }
+  },
+  "replies": {
+    "method": "get_replies",
+    "description": "Read a post conversation.",
+    "write": false,
+    "fields": {
+      "tweet_id": {
+        "type": "string",
+        "pattern": "^[0-9]{1,25}$"
+      },
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100,
+        "default": 20
+      }
+    }
+  },
+  "bookmarks": {
+    "method": "bookmarks",
+    "description": "Read your bookmarks.",
+    "write": false,
+    "fields": {
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100,
+        "default": 20
+      }
+    }
+  },
+  "likes": {
+    "method": "user_likes",
+    "description": "Read available likes for a user; X may restrict access.",
+    "write": false,
+    "fields": {
+      "username": {
+        "type": "string",
+        "pattern": "^@?[A-Za-z0-9_]{1,15}$"
+      },
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100,
+        "default": 20
+      }
+    }
+  },
+  "notifications": {
+    "method": "notifications",
+    "description": "Read notifications.",
+    "write": false,
+    "fields": {
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100,
+        "default": 20
+      }
+    }
+  },
+  "followers": {
+    "method": "followers",
+    "description": "Read followers for a user.",
+    "write": false,
+    "fields": {
+      "username": {
+        "type": "string",
+        "pattern": "^@?[A-Za-z0-9_]{1,15}$"
+      },
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100,
+        "default": 20
+      }
+    }
+  },
+  "following": {
+    "method": "following",
+    "description": "Read following for a user.",
+    "write": false,
+    "fields": {
+      "username": {
+        "type": "string",
+        "pattern": "^@?[A-Za-z0-9_]{1,15}$"
+      },
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100,
+        "default": 20
+      }
+    }
+  },
+  "likers": {
+    "method": "likers",
+    "description": "Read likers of a post.",
+    "write": false,
+    "fields": {
+      "tweet_id": {
+        "type": "string",
+        "pattern": "^[0-9]{1,25}$"
+      },
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100,
+        "default": 20
+      }
+    }
+  },
+  "retweeters": {
+    "method": "retweeters",
+    "description": "Read retweeters of a post.",
+    "write": false,
+    "fields": {
+      "tweet_id": {
+        "type": "string",
+        "pattern": "^[0-9]{1,25}$"
+      },
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100,
+        "default": 20
+      }
+    }
+  },
+  "publish": {
+    "method": "post",
+    "description": "Publish a post or reply. Public write.",
+    "write": true,
+    "fields": {
+      "text": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 25000
+      },
+      "reply_to": {
+        "type": "string",
+        "pattern": "^[0-9]{1,25}$",
+        "optional": true
+      }
+    }
+  },
+  "thread": {
+    "method": "post_thread",
+    "description": "Publish a thread of up to 10 posts; partial completion is possible.",
+    "write": true,
+    "fields": {
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 25000
+        },
+        "minItems": 1,
+        "maxItems": 10
+      }
+    }
+  },
+  "quote": {
+    "method": "quote",
+    "description": "Publish a quote post.",
+    "write": true,
+    "fields": {
+      "text": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 25000
+      },
+      "quote_tweet_id": {
+        "type": "string",
+        "pattern": "^[0-9]{1,25}$"
+      }
+    }
+  },
+  "note": {
+    "method": "post_note",
+    "description": "Publish a long-form post; requires account entitlement.",
+    "write": true,
+    "fields": {
+      "text": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 25000
+      },
+      "reply_to": {
+        "type": "string",
+        "pattern": "^[0-9]{1,25}$",
+        "optional": true
+      }
+    }
+  },
+  "schedule": {
+    "method": "schedule",
+    "description": "Schedule a future post on X.",
+    "write": true,
+    "fields": {
+      "text": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 25000
+      },
+      "at_epoch": {
+        "type": "integer",
+        "minimum": 1
+      }
+    }
+  },
+  "unschedule": {
+    "method": "unschedule",
+    "description": "Cancel an X scheduled post.",
+    "write": true,
+    "fields": {
+      "scheduled_tweet_id": {
+        "type": "string",
+        "pattern": "^[0-9]{1,25}$"
+      }
+    }
+  },
+  "delete": {
+    "method": "delete",
+    "description": "Delete one specified post.",
+    "write": true,
+    "fields": {
+      "tweet_id": {
+        "type": "string",
+        "pattern": "^[0-9]{1,25}$"
+      }
+    }
+  },
+  "like": {
+    "method": "like",
+    "description": "Like one specified post.",
+    "write": true,
+    "fields": {
+      "tweet_id": {
+        "type": "string",
+        "pattern": "^[0-9]{1,25}$"
+      }
+    }
+  },
+  "unlike": {
+    "method": "unlike",
+    "description": "Unlike one specified post.",
+    "write": true,
+    "fields": {
+      "tweet_id": {
+        "type": "string",
+        "pattern": "^[0-9]{1,25}$"
+      }
+    }
+  },
+  "retweet": {
+    "method": "retweet",
+    "description": "Retweet one specified post.",
+    "write": true,
+    "fields": {
+      "tweet_id": {
+        "type": "string",
+        "pattern": "^[0-9]{1,25}$"
+      }
+    }
+  },
+  "unretweet": {
+    "method": "unretweet",
+    "description": "Unretweet one specified post.",
+    "write": true,
+    "fields": {
+      "tweet_id": {
+        "type": "string",
+        "pattern": "^[0-9]{1,25}$"
+      }
+    }
+  },
+  "bookmark": {
+    "method": "bookmark",
+    "description": "Bookmark one specified post.",
+    "write": true,
+    "fields": {
+      "tweet_id": {
+        "type": "string",
+        "pattern": "^[0-9]{1,25}$"
+      }
+    }
+  },
+  "unbookmark": {
+    "method": "unbookmark",
+    "description": "Unbookmark one specified post.",
+    "write": true,
+    "fields": {
+      "tweet_id": {
+        "type": "string",
+        "pattern": "^[0-9]{1,25}$"
+      }
+    }
+  },
+  "pin": {
+    "method": "pin",
+    "description": "Pin one specified post.",
+    "write": true,
+    "fields": {
+      "tweet_id": {
+        "type": "string",
+        "pattern": "^[0-9]{1,25}$"
+      }
+    }
+  },
+  "unpin": {
+    "method": "unpin",
+    "description": "Unpin one specified post.",
+    "write": true,
+    "fields": {
+      "tweet_id": {
+        "type": "string",
+        "pattern": "^[0-9]{1,25}$"
+      }
+    }
+  },
+  "follow": {
+    "method": "follow",
+    "description": "Follow one specified user.",
+    "write": true,
+    "fields": {
+      "username": {
+        "type": "string",
+        "pattern": "^@?[A-Za-z0-9_]{1,15}$"
+      }
+    }
+  },
+  "unfollow": {
+    "method": "unfollow",
+    "description": "Unfollow one specified user.",
+    "write": true,
+    "fields": {
+      "username": {
+        "type": "string",
+        "pattern": "^@?[A-Za-z0-9_]{1,15}$"
+      }
+    }
+  },
+  "block": {
+    "method": "block",
+    "description": "Block one specified user.",
+    "write": true,
+    "fields": {
+      "username": {
+        "type": "string",
+        "pattern": "^@?[A-Za-z0-9_]{1,15}$"
+      }
+    }
+  },
+  "unblock": {
+    "method": "unblock",
+    "description": "Unblock one specified user.",
+    "write": true,
+    "fields": {
+      "username": {
+        "type": "string",
+        "pattern": "^@?[A-Za-z0-9_]{1,15}$"
+      }
+    }
+  },
+  "mute": {
+    "method": "mute",
+    "description": "Mute one specified user.",
+    "write": true,
+    "fields": {
+      "username": {
+        "type": "string",
+        "pattern": "^@?[A-Za-z0-9_]{1,15}$"
+      }
+    }
+  },
+  "unmute": {
+    "method": "unmute",
+    "description": "Unmute one specified user.",
+    "write": true,
+    "fields": {
+      "username": {
+        "type": "string",
+        "pattern": "^@?[A-Za-z0-9_]{1,15}$"
+      }
+    }
+  },
+  "publishMedia": {
+    "method": "post",
+    "description": "Publish with one image supplied as base64, not a local path.",
+    "write": true,
+    "fields": {
+      "text": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 25000
+      },
+      "media_base64": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 280000
+      },
+      "media_type": {
+        "type": "string",
+        "enum": [
+          "image/png",
+          "image/jpeg",
+          "image/webp",
+          "image/gif"
+        ]
+      },
+      "reply_to": {
+        "type": "string",
+        "pattern": "^[0-9]{1,25}$",
+        "optional": true
+      }
+    }
+  }
+}

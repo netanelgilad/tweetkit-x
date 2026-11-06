@@ -16,10 +16,10 @@ import json
 import os
 import re
 
-import requests
+from .transport import SafeSession, TransportError
 from bs4 import BeautifulSoup
 from x_client_transaction import ClientTransaction
-from x_client_transaction.utils import handle_x_migration, get_ondemand_file_url
+from x_client_transaction.utils import get_ondemand_file_url
 
 from . import constants as C
 from .cookie import load_cookie, ct0_of, user_id_of, has_auth, missing_required
@@ -43,7 +43,7 @@ class TweetKit:
             raise ValueError(f"cookie is missing required value(s): {', '.join(miss)}")
         self.timeout = timeout
         self._ct = None
-        self._session = requests.Session()
+        self._session = SafeSession()
         self._session.headers.update({
             "User-Agent": C.UA, "Accept-Language": "en-US,en;q=0.9"})
 
@@ -58,10 +58,9 @@ class TweetKit:
                 "https://x.com/i/jf/", timeout=self.timeout).text, "html.parser")
             try:
                 od_url = get_ondemand_file_url(home)
-            except AttributeError:
-                home = handle_x_migration(self._session)
-                od_url = get_ondemand_file_url(home)
-            od = requests.get(od_url, headers=dict(self._session.headers), timeout=self.timeout)
+            except (AttributeError, KeyError, ValueError):
+                raise TransportError("X bootstrap changed; refresh the client before retrying") from None
+            od = self._session.get(od_url, timeout=self.timeout)
             self._ct = ClientTransaction(home, BeautifulSoup(od.text, "html.parser"))
         return self._ct
 
@@ -113,7 +112,7 @@ class TweetKit:
                 f"&media_type={media_type.replace('/', '%2F')}&media_category={category}")
         r = self._session.post(init, headers=self._headers("POST", mpath), timeout=self.timeout)
         if r.status_code not in (200, 202):
-            raise RuntimeError(f"media INIT {r.status_code}: {r.text[:200]}")
+            raise RuntimeError(f"media INIT {r.status_code}: {'X response did not match the expected schema'}")
         mid = r.json()["media_id_string"]
 
         with open(path, "rb") as f:
@@ -126,21 +125,24 @@ class TweetKit:
                 headers=self._headers("POST", mpath),
                 files={"media": ("blob", seg, "application/octet-stream")}, timeout=self.timeout)
             if r.status_code not in (200, 204):
-                raise RuntimeError(f"media APPEND {r.status_code}: {r.text[:200]}")
+                raise RuntimeError(f"media APPEND {r.status_code}: {'X response did not match the expected schema'}")
 
         r = self._session.post(f"{C.UPLOAD_URL}?command=FINALIZE&media_id={mid}",
                                headers=self._headers("POST", mpath), timeout=self.timeout)
         if r.status_code not in (200, 201):
-            raise RuntimeError(f"media FINALIZE {r.status_code}: {r.text[:200]}")
+            raise RuntimeError(f"media FINALIZE {r.status_code}: {'X response did not match the expected schema'}")
 
         info = (r.json() or {}).get("processing_info")
+        deadline = _t.monotonic() + 90
         while info and info.get("state") in ("pending", "in_progress"):
+            if _t.monotonic() > deadline:
+                raise TransportError("Media processing timed out; do not retry the upload automatically")
             _t.sleep(min(info.get("check_after_secs", 2), 10))
             s = self._session.get(f"{C.UPLOAD_URL}?command=STATUS&media_id={mid}",
                                   headers=self._headers("GET", mpath), timeout=self.timeout)
             info = (s.json() or {}).get("processing_info")
             if info and info.get("state") == "failed":
-                raise RuntimeError(f"media processing failed: {info}")
+                raise RuntimeError("Media processing failed")
 
         if alt_text:
             self._session.post(
@@ -175,15 +177,15 @@ class TweetKit:
         try:
             j = r.json()
         except Exception:
-            return {"ok": False, "status": r.status_code, "error": r.text[:300]}
+            return {"ok": False, "status": r.status_code, "error": "X response did not match the expected schema"}
         if j.get("errors"):
             return {"ok": False, "status": r.status_code,
-                    "error": "; ".join(e.get("message", "?") for e in j["errors"])}
+                    "error": "X rejected the operation"}
         try:
             rid = j["data"]["create_tweet"]["tweet_results"]["result"]["rest_id"]
             return {"ok": True, "id": rid, "url": f"https://x.com/i/status/{rid}"}
         except Exception:
-            return {"ok": False, "status": r.status_code, "error": r.text[:300]}
+            return {"ok": False, "status": r.status_code, "error": "X response did not match the expected schema"}
 
     def post(self, text, image_path=None, reply_to=None, images=None, alt_texts=None):
         """Post text + optional media. Use `image_path` for one image, or `images`
@@ -222,10 +224,10 @@ class TweetKit:
         try:
             j = r.json()
         except Exception:
-            return {"ok": False, "status": r.status_code, "error": r.text[:300]}
+            return {"ok": False, "status": r.status_code, "error": "X response did not match the expected schema"}
         if j.get("errors"):
             return {"ok": False, "status": r.status_code,
-                    "error": "; ".join(e.get("message", "?") for e in j["errors"])}
+                    "error": "X rejected the operation"}
         return {"ok": True, "id": str(tweet_id)}
 
     def delete_many(self, tweet_ids):
@@ -250,10 +252,10 @@ class TweetKit:
         try:
             j = r.json()
         except Exception:
-            return {"ok": False, "status": r.status_code, "error": r.text[:300]}
+            return {"ok": False, "status": r.status_code, "error": "X response did not match the expected schema"}
         if j.get("errors"):
             return {"ok": False, "status": r.status_code,
-                    "error": "; ".join(e.get("message", "?") for e in j["errors"])}
+                    "error": "X rejected the operation"}
         return {"ok": True, "data": j.get("data")}
 
     def like(self, tweet_id):
@@ -293,7 +295,7 @@ class TweetKit:
         r = self._session.get(f"{C.GQL_BASE}/{qid}/TweetResultByRestId", params=params,
                               headers=self._headers("GET", path), timeout=self.timeout)
         if r.status_code != 200:
-            return {"ok": False, "status": r.status_code, "error": r.text[:200]}
+            return {"ok": False, "status": r.status_code, "error": "X response did not match the expected schema"}
         tweets, users = {}, {}
         _walk_timeline(r.json(), tweets, users)
         if not tweets:
@@ -323,7 +325,7 @@ class TweetKit:
             r = self._session.get(f"{C.GQL_BASE}/{qid}/SearchTimeline", params=params,
                                   headers=self._headers("GET", path), timeout=self.timeout)
             if r.status_code != 200:
-                raise RuntimeError(f"SearchTimeline HTTP {r.status_code}: {r.text[:200]}")
+                raise RuntimeError(f"SearchTimeline HTTP {r.status_code}: {'X response did not match the expected schema'}")
             before = len(tweets)
             next_cursor = _walk_timeline(r.json(), tweets, users)
             if len(tweets) == before or not next_cursor:
@@ -371,13 +373,13 @@ class TweetKit:
         try:
             j = r.json()
         except Exception:
-            return {"ok": False, "status": r.status_code, "error": r.text[:200]}
+            return {"ok": False, "status": r.status_code, "error": "X response did not match the expected schema"}
         if j.get("errors"):
-            return {"ok": False, "error": "; ".join(e.get("message", "?") for e in j["errors"])}
+            return {"ok": False, "error": "X rejected the operation"}
         try:
             return {"ok": True, "scheduled_id": j["data"]["tweet"]["rest_id"]}
         except Exception:
-            return {"ok": False, "error": r.text[:200]}
+            return {"ok": False, "error": "X response did not match the expected schema"}
 
     def unschedule(self, scheduled_tweet_id):
         """Cancel a scheduled tweet."""
@@ -395,9 +397,9 @@ class TweetKit:
         try:
             body = r.json()
         except Exception:
-            body = {"raw": r.text[:200]}
+            body = {"raw": "X response did not match the expected schema"}
         if r.status_code != 200 or (isinstance(body, dict) and body.get("errors")):
-            return {"ok": False, "status": r.status_code, "error": body}
+            return {"ok": False, "status": r.status_code, "error": "X rejected the operation"}
         return {"ok": True}
 
     def follow(self, username):
@@ -458,7 +460,7 @@ class TweetKit:
                     headers=self._headers("POST", path, {"content-type": "application/json"}),
                     timeout=self.timeout)
             if r.status_code != 200:
-                raise RuntimeError(f"{op} HTTP {r.status_code}: {r.text[:200]}")
+                raise RuntimeError(f"{op} HTTP {r.status_code}: {'X response did not match the expected schema'}")
             before = len(tweets)
             nxt = _walk_timeline(r.json(), tweets, users)
             if len(tweets) == before or not nxt:
@@ -484,7 +486,7 @@ class TweetKit:
             r = self._session.get(f"{C.GQL_BASE}/{qid}/{op}", params=params,
                                   headers=self._headers("GET", path), timeout=self.timeout)
             if r.status_code != 200:
-                raise RuntimeError(f"{op} HTTP {r.status_code}: {r.text[:200]}")
+                raise RuntimeError(f"{op} HTTP {r.status_code}: {'X response did not match the expected schema'}")
             before = len(users)
             nxt = _walk_users(r.json(), users)
             if len(users) == before or not nxt:
@@ -575,7 +577,7 @@ class TweetKit:
         try:
             res = r.json()["data"]["user"]["result"]
         except Exception:
-            return {"ok": False, "error": r.text[:200]}
+            return {"ok": False, "error": "X response did not match the expected schema"}
         lg = res.get("legacy", {}) or {}
         core = res.get("core", {}) or {}
         return {"ok": True, "id": res.get("rest_id"),
@@ -611,7 +613,7 @@ class TweetKit:
         try:
             return j["data"]["user"]["result"]["rest_id"]
         except Exception:
-            raise RuntimeError(f"could not resolve @{username}: {r.text[:200]}")
+            raise RuntimeError(f"could not resolve @{username}: {'X response did not match the expected schema'}")
 
     def get_tweets(self, username=None, limit=200, include_replies=True):
         """Return a list of tweet dicts for a user (default: you).
@@ -641,7 +643,7 @@ class TweetKit:
             r = self._session.get(f"{C.GQL_BASE}/{qid}/UserTweets", params=params,
                                   headers=self._headers("GET", path), timeout=self.timeout)
             if r.status_code != 200:
-                raise RuntimeError(f"UserTweets HTTP {r.status_code}: {r.text[:200]}")
+                raise RuntimeError(f"UserTweets HTTP {r.status_code}: {'X response did not match the expected schema'}")
             j = r.json()
             before = len(tweets)
             next_cursor = _walk_timeline(j, tweets, users)
@@ -747,14 +749,14 @@ def _create_result(r):
     try:
         j = r.json()
     except Exception:
-        return {"ok": False, "status": r.status_code, "error": r.text[:300]}
+        return {"ok": False, "status": r.status_code, "error": "X response did not match the expected schema"}
     if j.get("errors"):
         return {"ok": False, "status": r.status_code,
-                "error": "; ".join(e.get("message", "?") for e in j["errors"])}
+                "error": "X rejected the operation"}
     rid = _find_rest_id(j.get("data"))
     if rid:
         return {"ok": True, "id": rid, "url": f"https://x.com/i/status/{rid}"}
-    return {"ok": False, "status": r.status_code, "error": r.text[:300]}
+    return {"ok": False, "status": r.status_code, "error": "X response did not match the expected schema"}
 
 
 def _walk_users(node, out, _cursor=None):
